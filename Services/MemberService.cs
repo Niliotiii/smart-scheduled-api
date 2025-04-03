@@ -1,5 +1,6 @@
 using SmartScheduledApi.DataContext;
-using Microsoft.EntityFrameworkCore; 
+using Microsoft.EntityFrameworkCore;
+using SmartScheduledApi.Dtos;
 
 public class MemberService : IMemberService
 {
@@ -23,8 +24,3 @@ public class MemberService : IMemberService
     }
 }
 
-public class MemberInfo
-{
-    public string? TeamRule { get; set; }
-    public int? TeamId { get; set; }
-}

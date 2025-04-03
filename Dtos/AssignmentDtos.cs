@@ -4,7 +4,6 @@ public class CreateAssignmentDto
 {
     public string Title { get; set; }
     public string Description { get; set; }
-    // Assignment agora é uma categoria do time
 }
 
 public class UpdateAssignmentDto
@@ -22,7 +21,6 @@ public class AssignmentResponseDto
     public DateTime? UpdatedAt { get; set; }
     public int TeamId { get; set; }
     public string TeamName { get; set; }
-    // Não inclui mais Member diretamente
 }
 
 public class AssignmentDetailResponseDto

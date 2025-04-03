@@ -20,14 +20,6 @@ public class TeamDto
     public string Description { get; set; }
 }
 
-public class TeamMemberDto
-{
-    public int UserId { get; set; }
-    public string Name { get; set; }
-    public string Email { get; set; }
-    public string Role { get; set; }
-}
-
 public class AddTeamMemberDto
 {
     public int UserId { get; set; }

@@ -85,3 +85,11 @@ public class UserAssignmentDto
     public string Title { get; set; }
     public string Description { get; set; }
 }
+
+public class UserTeamRule
+{
+    public int TeamId { get; set; }
+    public string TeamName { get; set; }
+    public int TeamRuleId { get; set; }
+    public string TeamRuleName { get; set; }
+}

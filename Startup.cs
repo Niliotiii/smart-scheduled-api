@@ -55,14 +55,10 @@ public class Startup
             options.AddPolicy("User", policy => policy.RequireRole("User"));
         });
 
-        // Register services
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMemberService, MemberService>();
-        services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
-        // ...other services
 
-        // Add DbContext and Seed Data
         var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
         services.AddDbContext<SmartScheduleApiContext>(options =>
             options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
@@ -84,7 +80,6 @@ public class Startup
             endpoints.MapControllers();
         });
 
-        // Seed the database
         context.Database.Migrate();
     }
 }

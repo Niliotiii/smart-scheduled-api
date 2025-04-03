@@ -26,10 +26,6 @@ namespace SmartScheduledApi.Services
                 | Permission.ViewSchedule
         };
 
-        public TeamRulePermissionService()
-        {
-        }
-
         public bool HasPermission(TeamRule rule, Permission permission)
         {
             if (_permissionsMap.TryGetValue(rule, out var allowedPermissions))

@@ -12,10 +12,8 @@ using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Carregar variáveis de ambiente do arquivo .env
 Env.Load();
 
-// Adicionar serviços ao contêiner
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -63,11 +61,9 @@ var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
 var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
 var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY");
 
-// Adicionar autenticação
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Configurar autenticação JWT Bearer
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -85,7 +81,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 
-// Adicionar configuração do CORS
 builder.Services.AddCors(options =>
 {
     var corsOrigins = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS")?.Split(',')
@@ -98,7 +93,6 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowCredentials());
 
-    // Em ambiente de desenvolvimento, podemos ter uma política mais permissiva
     if (builder.Environment.IsDevelopment())
     {
         options.AddPolicy("Development",
@@ -109,14 +103,12 @@ builder.Services.AddCors(options =>
     }
 });
 
-// Adicionar serviços
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<UserContextService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
-// Register custom services
 builder.Services.AddScoped<AuthorizationService>();
 builder.Services.AddScoped<TeamRulePermissionService>();
 
@@ -132,14 +124,13 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Adicionar middleware CORS
 if (app.Environment.IsDevelopment())
 {
-    app.UseCors("Development");  // Use política mais permissiva em desenvolvimento
+    app.UseCors("Development");
 }
 else
 {
-    app.UseCors("AllowSpecificOrigin");  // Use política restritiva em produção
+    app.UseCors("AllowSpecificOrigin");
 }
 
 app.MapControllers();

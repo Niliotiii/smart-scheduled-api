@@ -24,24 +24,4 @@ public class CreateInviteDto
     public TeamRule TeamRule { get; set; }
 }
 
-public class UpdateInviteStatusDto
-{
-    public InviteStatus Status { get; set; }
-}
 
-public class InviteUserDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-}
-
-public class InviteResponseDto
-{
-    public int Id { get; set; }
-    public int TeamId { get; set; }
-    public string TeamName { get; set; }
-    public string Role { get; set; }
-    public InviteUserDto InvitedBy { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public InviteStatus Status { get; set; }
-}

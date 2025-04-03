@@ -345,9 +345,9 @@ public class TeamController : BaseController
     [HttpGet("my-teams")]
     public async Task<IActionResult> GetMyTeams()
     {
-        var teamRules = await _userContext.GetUserTeamRolesAsync();
+        var teamRules = await _userContext.GetUserTeamRulesAsync();
         if (!teamRules.Any())
-            return ApiResponse(new List<UserTeamRole>(), "No team memberships found");
+            return ApiResponse(new List<UserTeamRule>(), "No team memberships found");
 
         return ApiResponse(teamRules);
     }

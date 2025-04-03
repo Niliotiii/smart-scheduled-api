@@ -14,26 +14,10 @@ public class AuthorizationService
         _context = context;
     }
 
-    public async Task<bool> HasApplicationRoleAsync(int userId, ApplicationRole role)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-        return user?.ApplicationRole == role;
-    }
-
     public bool HasApplicationRole(int userId, ApplicationRole role)
     {
         var user = _context.Users.FirstOrDefault(u => u.Id == userId);
         return user?.ApplicationRole == role;
-    }
-
-    public async Task<bool> HasAnyTeamRuleAsync(int userId, int teamId, params TeamRule[] rules)
-    {
-        var membership = await _context.Members
-            .FirstOrDefaultAsync(m => m.UserId == userId && m.TeamId == teamId);
-
-        if (membership == null) return false;
-
-        return rules.Contains(membership.TeamRule);
     }
 
     public bool HasAnyTeamRule(int userId, int teamId, params TeamRule[] rules)
@@ -44,13 +28,5 @@ public class AuthorizationService
         if (membership == null) return false;
 
         return rules.Contains(membership.TeamRule);
-    }
-
-    public TeamRule GetTeamRule(int userId, int teamId)
-    {
-        var membership = _context.Members
-            .FirstOrDefault(m => m.UserId == userId && m.TeamId == teamId);
-
-        return membership?.TeamRule ?? TeamRule.Viewer;
     }
 }

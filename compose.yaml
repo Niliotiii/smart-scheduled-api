@@ -1,0 +1,6 @@
+﻿services:
+  smart-scheduled-api:
+    image: smart-scheduled-api
+    build:
+      context: .
+      dockerfile: Dockerfile

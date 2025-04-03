@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using SmartScheduledApi.Enums;
+using SmartScheduledApi.Services;
 using System.Net;
 
 namespace SmartScheduledApi.Controllers;
@@ -8,6 +10,31 @@ namespace SmartScheduledApi.Controllers;
 [Produces("application/json")]
 public abstract class BaseController : ControllerBase
 {
+    protected readonly IPermissionService _permissionService;
+
+    protected BaseController(IPermissionService permissionService)
+    {
+        _permissionService = permissionService;
+    }
+
+    protected async Task<bool> EnsureApplicationPermissionAsync(int userId, ApplicationPermission permission)
+    {
+        if (!await _permissionService.HasApplicationPermissionAsync(userId, permission))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    protected async Task<bool> EnsureTeamPermissionAsync(int userId, int teamId, TeamPermission permission)
+    {
+        if (!await _permissionService.HasTeamPermissionAsync(userId, teamId, permission))
+        {
+            return false;
+        }
+        return true;
+    }
+
     protected IActionResult ApiResponse<T>(T data, string message = "Success", HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         var response = new

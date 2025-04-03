@@ -18,26 +18,26 @@ public class UserController : BaseController
     private readonly SmartScheduleApiContext _context;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-    private readonly TeamRulePermissionService _teamRulePermissionService;
-
     public UserController(
         SmartScheduleApiContext context,
         IPasswordHasher<User> passwordHasher,
         UserContextService userContext,
-        AuthorizationService authService,
-        TeamRulePermissionService teamRulePermissionService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _userContext = userContext;
-        _authService = authService;
-        _teamRulePermissionService = teamRulePermissionService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetUsers()
     {
+        var userId = _userContext.GetCurrentUserId();
+        if (!userId.HasValue) return Unauthorized();
+
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.ViewUsers))
+            return Forbidden("You don't have permission to view users");
+
         var users = await _context.Users
             .Select(u => new UserDto
             {
@@ -69,8 +69,8 @@ public class UserController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-            return Forbid();
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.CreateUsers))
+            return Forbidden("You don't have permission to create users");
 
         if (!ModelState.IsValid)
             return InvalidRequest("Invalid user data", ModelState);
@@ -206,11 +206,8 @@ public class UserController : BaseController
         if (!currentUserId.HasValue)
             return Unauthorized();
 
-        // Pode ver apenas seus próprios schedules ou ser administrador
-        if (currentUserId != id && !_authService.HasApplicationRole(currentUserId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (currentUserId != id && !await EnsureApplicationPermissionAsync(currentUserId.Value, ApplicationPermission.ManageSystem))
+            return Forbidden("You don't have permission to view other users' schedules");
 
         // Atualizar para usar a relação correta entre Member e Assigned
         var schedules = await _context.Assigneds
@@ -247,8 +244,8 @@ public class UserController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-            return Forbid();
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.EditUsers))
+            return Forbidden("You don't have permission to edit users");
 
         var user = await _context.Users.Include(u => u.Address).FirstOrDefaultAsync(u => u.Id == id);
         if (user == null)
@@ -313,8 +310,8 @@ public class UserController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-            return Forbid();
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.DeleteUsers))
+            return Forbidden("You don't have permission to delete users");
 
         var user = await _context.Users.Include(u => u.Address).FirstOrDefaultAsync(u => u.Id == id);
         if (user == null)

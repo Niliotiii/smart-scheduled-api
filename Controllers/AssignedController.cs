@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using SmartScheduledApi.Controllers;
 using SmartScheduledApi.DataContext;
 using SmartScheduledApi.Models;
 using SmartScheduledApi.Dtos;
@@ -11,33 +10,31 @@ using SmartScheduledApi.Enums;
 
 namespace SmartScheduledApi.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/teams/{teamId}/[controller]")]  // Update route to include teamId
 [Authorize]
 public class AssignedController : BaseController
 {
     private readonly SmartScheduleApiContext _context;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-    private readonly TeamRulePermissionService _teamRulePermissionService;
 
     public AssignedController(
         SmartScheduleApiContext context,
         UserContextService userContext,
-        AuthorizationService authService,
-        TeamRulePermissionService teamRulePermissionService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _userContext = userContext;
-        _authService = authService;
-        _teamRulePermissionService = teamRulePermissionService;
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAssigned()
+    public async Task<IActionResult> GetAssigned(int teamId)
     {
         var userId = _userContext.GetCurrentUserId();
         if (!userId.HasValue)
             return Unauthorized();
+
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view assignments");
 
         var assigneds = await _context.Assigneds
             .Include(a => a.Scheduled)
@@ -81,17 +78,14 @@ public class AssignedController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        // Verificar se o membro pertence ao time e se o usuário tem permissão
         var member = await _context.Members
             .FirstOrDefaultAsync(m => m.Id == dto.MemberId);
 
         if (member == null)
             return NotFound("Member not found");
 
-        if (!_authService.HasAnyTeamRule(userId.Value, member.TeamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, member.TeamId, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to manage assignments");
 
         if (!ModelState.IsValid)
             return InvalidRequest("Invalid assigned data", ModelState);
@@ -126,7 +120,7 @@ public class AssignedController : BaseController
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetAssigned(int id)
+    public async Task<IActionResult> GetAssignedById(int id)
     {
         var assigned = await _context.Assigneds
             .Include(a => a.Scheduled)
@@ -180,10 +174,8 @@ public class AssignedController : BaseController
         if (assigned == null)
             return NotFound("Assigned not found");
 
-        if (!_authService.HasAnyTeamRule(userId.Value, assigned.Member.TeamId, TeamRule.Leader))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, assigned.Member.TeamId, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to delete assignments");
 
         try
         {
@@ -197,8 +189,9 @@ public class AssignedController : BaseController
         }
     }
 
+    // Remove the teamId from this route since it's already in the controller route
     [HttpGet("schedule/{scheduleId}")]
-    public async Task<IActionResult> GetBySchedule(int scheduleId)
+    public async Task<IActionResult> GetBySchedule(int teamId, int scheduleId)
     {
         var userId = _userContext.GetCurrentUserId();
         if (!userId.HasValue)
@@ -217,11 +210,8 @@ public class AssignedController : BaseController
         if (firstAssigned == null)
             return NotFound("No assignments found for this schedule");
 
-        if (!_authService.HasAnyTeamRule(userId.Value, firstAssigned.Member.TeamId,
-            TeamRule.Leader, TeamRule.Editor, TeamRule.Viewer))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, firstAssigned.Member.TeamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view assignments");
 
         var assigneds = await _context.Assigneds
             .Where(a => a.ScheduledId == scheduleId)
@@ -252,11 +242,8 @@ public class AssignedController : BaseController
         if (!currentUserId.HasValue)
             return Unauthorized();
 
-        // Pode ver apenas seus próprios assignments ou ser administrador
-        if (currentUserId != userId && !_authService.HasApplicationRole(currentUserId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (currentUserId != userId && !await EnsureApplicationPermissionAsync(currentUserId.Value, ApplicationPermission.ManageSystem))
+            return Forbidden("You don't have permission to view other users' assignments");
 
         var assigneds = await _context.Assigneds
             .Where(a => a.Member.UserId == userId)  // Usar Member direto do Assigned
@@ -267,6 +254,52 @@ public class AssignedController : BaseController
                 Title = a.Scheduled.Title,
                 StartDate = a.Scheduled.StartDate,
                 EndDate = a.Scheduled.EndDate
+            })
+            .ToListAsync();
+
+        return ApiResponse(assigneds);
+    }
+
+    // Remove "team/{teamId}" since teamId is already in controller route
+    [HttpGet("assigned")]
+    public async Task<IActionResult> GetAssignedByTeam(int teamId)
+    {
+        var userId = _userContext.GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view assignments");
+
+        var assigneds = await _context.Assigneds
+            .Include(a => a.Scheduled)
+            .Include(a => a.Assignment)
+            .Include(a => a.Member)  // Usar Member direto do Assigned
+                .ThenInclude(m => m.User)
+            .Select(a => new AssignedResponseDto
+            {
+                Id = a.Id,
+                Schedule = new AssignedScheduleDto
+                {
+                    Id = a.Scheduled.Id,
+                    Title = a.Scheduled.Title,
+                    StartDate = a.Scheduled.StartDate,
+                    EndDate = a.Scheduled.EndDate
+                },
+                Assignment = new AssignedAssignmentDto
+                {
+                    Id = a.Assignment.Id,
+                    Title = a.Assignment.Title,
+                    Description = a.Assignment.Description,
+                    User = new UserDto
+                    {
+                        Id = a.Member.User.Id,  // Usar Member direto do Assigned
+                        Name = a.Member.User.Name,  // Usar Member direto do Assigned
+                        Email = a.Member.User.Email  // Usar Member direto do Assigned
+                    }
+                },
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
 

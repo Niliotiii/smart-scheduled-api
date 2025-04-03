@@ -16,19 +16,13 @@ public class TeamController : BaseController
 {
     private readonly SmartScheduleApiContext _context;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-    private readonly TeamRulePermissionService _teamRulePermissionService;
-
     public TeamController(
         SmartScheduleApiContext context,
         UserContextService userContext,
-        AuthorizationService authService,
-        TeamRulePermissionService teamRulePermissionService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _userContext = userContext;
-        _authService = authService;
-        _teamRulePermissionService = teamRulePermissionService;
     }
 
     [HttpGet]
@@ -66,11 +60,8 @@ public class TeamController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        // Apenas administradores podem criar times
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.CreateTeams))
+            return Forbidden("You don't have permission to create teams");
 
         if (!ModelState.IsValid)
             return InvalidRequest("Invalid team data", ModelState);
@@ -121,14 +112,11 @@ public class TeamController : BaseController
             return Unauthorized();
 
         var isMember = await _context.Members.AnyAsync(m => m.TeamId == id && m.UserId == userId.Value);
-
         if (!isMember)
             return InvalidRequest("You do not have access to this team");
 
-        if (!_authService.HasAnyTeamRule(userId.Value, id, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, id, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to manage this team");
 
         var team = await _context.Teams.FindAsync(id);
         if (team == null)
@@ -156,21 +144,15 @@ public class TeamController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        // Apenas administradores podem deletar times
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.DeleteTeams))
+            return Forbidden("You don't have permission to delete teams");
 
         var isMember = await _context.Members.AnyAsync(m => m.TeamId == id && m.UserId == userId.Value);
-
         if (!isMember)
             return InvalidRequest("You do not have access to this team");
 
-        if (!_authService.HasAnyTeamRule(userId.Value, id, TeamRule.Leader))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, id, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to manage this team");
 
         var team = await _context.Teams.FindAsync(id);
         if (team == null)
@@ -224,20 +206,8 @@ public class TeamController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
-
-        // var isMember = await _context.Members.AnyAsync(m => m.TeamId == id && m.UserId == userId.Value);
-
-        // if (!isMember)
-        //     return InvalidRequest("You do not have access to this team");
-
-        // if (!_authService.HasAnyTeamRule(userId.Value, id, TeamRule.Leader, TeamRule.Editor))
-        // {
-        //     return Forbid();
-        // }
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.ManageSystem))
+            return Forbidden("You don't have permission to add team members");
 
         var team = await _context.Teams.FindAsync(id);
         if (team == null)
@@ -283,10 +253,8 @@ public class TeamController : BaseController
         if (!isMember)
             return InvalidRequest("You do not have access to this team");
 
-        if (!_authService.HasAnyTeamRule(currentUserId.Value, id, TeamRule.Leader))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(currentUserId.Value, id, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to manage this team");
 
         var member = await _context.Members
             .FirstOrDefaultAsync(m => m.TeamId == id && m.UserId == userId);
@@ -318,10 +286,8 @@ public class TeamController : BaseController
         if (!isMember)
             return InvalidRequest("You do not have access to this team");
 
-        if (!_authService.HasAnyTeamRule(currentUserId.Value, id, TeamRule.Leader))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(currentUserId.Value, id, TeamPermission.ManageTeamSettings))
+            return Forbidden("You don't have permission to manage this team");
 
         var member = await _context.Members
             .FirstOrDefaultAsync(m => m.TeamId == id && m.UserId == userId);
@@ -331,7 +297,7 @@ public class TeamController : BaseController
 
         try
         {
-            member.TeamRule = dto.TeamRule; 
+            member.TeamRule = dto.TeamRule;
             member.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             return ApiResponse(member, "Member role updated successfully");
@@ -355,15 +321,21 @@ public class TeamController : BaseController
     [HttpGet("{id}/my-role")]
     public async Task<IActionResult> GetMyRoleInTeam(int id)
     {
+        var userId = _userContext.GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+
         var membership = await _userContext.GetCurrentMembershipAsync(id);
         if (membership == null)
             return NotFound("You are not a member of this team");
 
+        var teamPermissions = await _permissionService.GetTeamPermissionsAsync(userId.Value, id);
+
         return ApiResponse(new
         {
             TeamId = id,
-            Role = membership.TeamRule.ToString(),  // Using TeamRule directly
-            Permissions = _teamRulePermissionService.GetPermissions(membership.TeamRule)
+            Role = membership.TeamRule.ToString(),
+            Permissions = teamPermissions.ToString()
         });
     }
 }

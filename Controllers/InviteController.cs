@@ -16,16 +16,13 @@ public class InviteController : BaseController
 {
     private readonly SmartScheduleApiContext _context;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-
     public InviteController(
         SmartScheduleApiContext context,
         UserContextService userContext,
-        AuthorizationService authService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _userContext = userContext;
-        _authService = authService;
     }
 
     [HttpGet]
@@ -64,10 +61,8 @@ public class InviteController : BaseController
         if (!currentUserId.HasValue)
             return Unauthorized();
 
-        if (userId != currentUserId && !_authService.HasApplicationRole(currentUserId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (userId != currentUserId && !await EnsureApplicationPermissionAsync(currentUserId.Value, ApplicationPermission.ViewUsers))
+            return Forbidden("You don't have permission to view other users' invites");
 
         var invites = await _context.Invites
             .Where(i => i.UserId == userId && i.Status == InviteStatus.Waiting)
@@ -111,7 +106,7 @@ public class InviteController : BaseController
 
         if (invite.UserId != userId &&
             invite.InvitedById != userId &&
-            !_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
+            !await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.ManageSystem))
         {
             return Forbid();
         }
@@ -141,7 +136,7 @@ public class InviteController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, dto.TeamId, TeamRule.Leader, TeamRule.Editor))
+        if (!await EnsureTeamPermissionAsync(userId.Value, dto.TeamId, TeamPermission.ManageInvites))
         {
             return Forbid();
         }
@@ -297,11 +292,8 @@ public class InviteController : BaseController
         if (invite == null)
             return NotFound("Invite not found");
 
-        if (invite.InvitedById != userId &&
-            !_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (invite.InvitedById != userId && !await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.ManageSystem))
+            return Forbidden("You don't have permission to cancel this invite");
 
         if (invite.Status != InviteStatus.Waiting)
             return InvalidRequest($"Cannot cancel invite that is {invite.Status}");
@@ -325,10 +317,8 @@ public class InviteController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewTeam))
+            return Forbidden("You don't have permission to view team invites");
 
         var invites = await _context.Invites
             .Where(i => i.TeamId == teamId)
@@ -360,10 +350,8 @@ public class InviteController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasApplicationRole(userId.Value, ApplicationRole.Administrator))
-        {
-            return Forbid();
-        }
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.ManageSystem))
+            return Forbidden("You don't have permission to view pending invites");
 
         var invites = await _context.Invites
             .Where(i => i.Status == InviteStatus.Waiting)

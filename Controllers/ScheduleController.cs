@@ -16,33 +16,24 @@ public class ScheduleController : BaseController
 {
     private readonly SmartScheduleApiContext _context;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-    private readonly TeamRulePermissionService _teamRulePermissionService;
 
     public ScheduleController(
         SmartScheduleApiContext context,
         UserContextService userContext,
-        AuthorizationService authService,
-        TeamRulePermissionService teamRulePermissionService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _userContext = userContext;
-        _authService = authService;
-        _teamRulePermissionService = teamRulePermissionService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetSchedules(int teamId)
     {
         var userId = _userContext.GetCurrentUserId();
-        if (!userId.HasValue)
-            return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
-        // Verificar permissão do usuário para este time
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor, TeamRule.Viewer))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view schedules");
 
         var team = await _context.Teams.FindAsync(teamId);
         if (team == null)
@@ -92,13 +83,10 @@ public class ScheduleController : BaseController
     public async Task<IActionResult> CreateSchedule(int teamId, [FromBody] CreateScheduleDto dto)
     {
         var userId = _userContext.GetCurrentUserId();
-        if (!userId.HasValue)
-            return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.CreateSchedules))
+            return Forbidden("You don't have permission to create schedules");
 
         var team = await _context.Teams.FindAsync(teamId);
         if (team == null)
@@ -130,17 +118,16 @@ public class ScheduleController : BaseController
     public async Task<IActionResult> UpdateSchedule(int teamId, int id, [FromBody] UpdateScheduleDto dto)
     {
         var userId = _userContext.GetCurrentUserId();
-        if (!userId.HasValue)
-            return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
-        var schedule = await _context.Scheduleds.FindAsync(id);
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.EditSchedules))
+            return Forbidden("You don't have permission to edit schedules");
+
+        var schedule = await _context.Scheduleds
+            .FirstOrDefaultAsync(s => s.Id == id && s.Assigneds.Any(a => a.Member.TeamId == teamId));
+
         if (schedule == null)
             return NotFound("Schedule not found");
-
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
 
         try
         {
@@ -163,17 +150,16 @@ public class ScheduleController : BaseController
     public async Task<IActionResult> DeleteSchedule(int teamId, int id)
     {
         var userId = _userContext.GetCurrentUserId();
-        if (!userId.HasValue)
-            return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
-        var schedule = await _context.Scheduleds.FindAsync(id);
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.DeleteSchedules))
+            return Forbidden("You don't have permission to delete schedules");
+
+        var schedule = await _context.Scheduleds
+            .FirstOrDefaultAsync(s => s.Id == id && s.Assigneds.Any(a => a.Member.TeamId == teamId));
+
         if (schedule == null)
             return NotFound("Schedule not found");
-
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader))
-        {
-            return Forbid();
-        }
 
         try
         {

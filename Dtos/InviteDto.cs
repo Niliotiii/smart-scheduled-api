@@ -24,4 +24,10 @@ public class CreateInviteDto
     public TeamRule TeamRule { get; set; }
 }
 
+public class InviteUserDto
+{
+    public int UserId { get; set; }
+    public TeamRule TeamRule { get; set; }
+}
+
 

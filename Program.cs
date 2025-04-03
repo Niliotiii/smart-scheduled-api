@@ -108,9 +108,7 @@ builder.Services.AddScoped<UserContextService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
-
-builder.Services.AddScoped<AuthorizationService>();
-builder.Services.AddScoped<TeamRulePermissionService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 
 var app = builder.Build();
 

@@ -17,19 +17,14 @@ public class AssignmentController : BaseController
 {
     private readonly SmartScheduleApiContext _context;
     private readonly UserContextService _userContext;
-    private readonly AuthorizationService _authService;
-    private readonly TeamRulePermissionService _teamRulePermissionService;
 
     public AssignmentController(
         SmartScheduleApiContext context,
         UserContextService userContext,
-        AuthorizationService authService,
-        TeamRulePermissionService teamRulePermissionService)
+        IPermissionService permissionService) : base(permissionService)
     {
         _context = context;
         _userContext = userContext;
-        _authService = authService;
-        _teamRulePermissionService = teamRulePermissionService;
     }
 
     [HttpGet]
@@ -39,10 +34,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor, TeamRule.Viewer))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view assignments");
 
         var team = await _context.Teams.FindAsync(teamId);
         if (team == null)
@@ -73,10 +66,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.CreateSchedules))
+            return Forbidden("You don't have permission to create assignments");
 
         if (!ModelState.IsValid)
             return InvalidRequest("Invalid assignment data", ModelState);
@@ -127,10 +118,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor, TeamRule.Viewer))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewAssignments))
+            return Forbidden("You don't have permission to view assignments");
 
         var assignment = await _context.Assignments
             .Where(a => a.Id == id && a.TeamId == teamId)
@@ -169,10 +158,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor, TeamRule.Viewer))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.ViewSchedules))
+            return Forbidden("You don't have permission to view assignments");
 
         // Buscar assignment diretamente pelo teamId e id
         var assignment = await _context.Assignments
@@ -217,10 +204,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader, TeamRule.Editor))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.EditSchedules))
+            return Forbidden("You don't have permission to edit assignments");
 
         // Buscar assignment pelo Assigned.Member
         var assignedWithAssignment = await _context.Assigneds
@@ -253,10 +238,8 @@ public class AssignmentController : BaseController
         if (!userId.HasValue)
             return Unauthorized();
 
-        if (!_authService.HasAnyTeamRule(userId.Value, teamId, TeamRule.Leader))
-        {
-            return Forbid();
-        }
+        if (!await EnsureTeamPermissionAsync(userId.Value, teamId, TeamPermission.DeleteSchedules))
+            return Forbidden("You don't have permission to delete assignments");
 
         // Buscar assignment pelo Assigned.Member
         var assignedWithAssignment = await _context.Assigneds

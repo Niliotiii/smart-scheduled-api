@@ -5,18 +5,21 @@ using System.Net;
 using SmartScheduledApi.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using SmartScheduledApi.Enums;
 
 namespace SmartScheduledApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController : ControllerBase
+public class AuthController : BaseController
 {
     private readonly IAuthService _authService;
     private readonly UserContextService _userContext;
 
-
-    public AuthController(IAuthService authService, UserContextService userContext)
+    public AuthController(
+        IAuthService authService,
+        UserContextService userContext,
+        IPermissionService permissionService) : base(permissionService)
     {
         _authService = authService;
         _userContext = userContext;
@@ -39,10 +42,11 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
         var userId = _userContext.GetCurrentUserId();
-        if (userId == null)
-        {
-            return Unauthorized("User ID not found in token");
-        }
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        if (!await EnsureApplicationPermissionAsync(userId.Value, ApplicationPermission.CreateUsers))
+            return Forbidden("You don't have permission to create users");
 
         var result = await _authService.Register(dto);
         if (!result)

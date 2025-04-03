@@ -1,147 +1,82 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using SmartScheduledApi.Services;
+using SmartScheduledApi.Enums;
 
 namespace SmartScheduledApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class RenderController : ControllerBase
+    public class RenderController : BaseController
     {
         private readonly IMemberService _memberService;
+        private readonly IPermissionService _permissionService;
 
-        public RenderController(IMemberService memberService)
+        public RenderController(
+            IMemberService memberService,
+            IPermissionService permissionService) : base(permissionService)
         {
             _memberService = memberService;
+            _permissionService = permissionService;
         }
 
         [HttpGet("render")]
         [Authorize]
         public async Task<IActionResult> GetRenderInfo([FromQuery] string? selectedTeam = null)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+            var appPermissions = await _permissionService.GetApplicationPermissionsAsync(userId);
+            var teamPermissions = selectedTeam != null ?
+                await _permissionService.GetTeamPermissionsAsync(userId, int.Parse(selectedTeam)) :
+                TeamPermission.None;
 
-            if (userId != null && selectedTeam != null)
+            var rolePermissions = GetRolePermissionsArray(appPermissions);
+            var teamRulePermissions = GetTeamPermissionsArray(teamPermissions);
+
+            return Ok(new
             {
-                var memberInfo = await _memberService.GetMemberInfoAsync(int.Parse(userId), int.Parse(selectedTeam));
-                var userRule = memberInfo.TeamRule;
-
-                var renderInfo = GetRenderInfoBasedOnRole(userRole, userRule, selectedTeam);
-                return Ok(renderInfo);
-            } else {
-
-                // Determinar o que renderizar baseado no papel do usuário e na presença de um time
-                var renderInfo = GetRenderInfoBasedOnRole(userRole, null, null);
-                return Ok(renderInfo);
-            }
+                RolePermissions = rolePermissions,
+                TeamRulePermissions = teamRulePermissions,
+            });
         }
 
-        private object GetRenderInfoBasedOnRole(string role, string? rule, string? team)
+        private Dictionary<string, bool> GetRolePermissionsArray(ApplicationPermission permissions)
         {
-            // Verifica se o usuário é administrador
-            if (role == "Administrator" || role == "Admin")
+            return new Dictionary<string, bool>
             {
-                // Administradores têm acesso mesmo sem um time selecionado
-                return new
-                {
-                    Page = "AdminDashboard",
-                    Permissions = "All",
-                    Team = team ?? "None",
-                    NeedsTeamSelection = string.IsNullOrEmpty(team),
-                    Components = new[] { "TeamManagement", "UserManagement", "SystemSettings" }
-                };
-            }
-            else if (role == "User")
-            {
-                // Para usuários regulares, primeiro verifica se têm time selecionado
-                if (string.IsNullOrEmpty(team))
-                {
-                    // Sem time selecionado, mostrar página de seleção/criação de time
-                    return new
-                    {
-                        Page = "TeamSelectionPage",
-                        Permissions = "SelectTeam",
-                        Team = "None",
-                        NeedsTeamSelection = true,
-                        Components = new[] { "TeamSelector", "CreateTeamButton", "TeamRequestForm" }
-                    };
-                }
-
-                // Se tem time selecionado mas não tem rule, possivelmente aguardando aprovação
-                if (string.IsNullOrEmpty(rule))
-                {
-                    return new
-                    {
-                        Page = "PendingAccessPage",
-                        Permissions = "None",
-                        Team = team,
-                        NeedsTeamSelection = false,
-                        Components = new[] { "WaitingApproval", "ContactAdmin", "ChangeTeamButton" }
-                    };
-                }
-
-                // Se tem time e rule, determina o que mostrar baseado na rule
-                return GetRenderInfoBasedOnRule(rule, team);
-            }
-            else
-            {
-                // Papel desconhecido, mostrar página padrão
-                return new
-                {
-                    Page = "Default",
-                    Permissions = "None",
-                    Team = "None",
-                    NeedsTeamSelection = true,
-                    Components = new[] { "AccessDenied" }
-                };
-            }
+                { nameof(ApplicationPermission.ViewTeams), permissions.HasFlag(ApplicationPermission.ViewTeams) },
+                { nameof(ApplicationPermission.CreateTeams), permissions.HasFlag(ApplicationPermission.CreateTeams) },
+                { nameof(ApplicationPermission.EditTeams), permissions.HasFlag(ApplicationPermission.EditTeams) },
+                { nameof(ApplicationPermission.DeleteTeams), permissions.HasFlag(ApplicationPermission.DeleteTeams) },
+                { nameof(ApplicationPermission.ViewUsers), permissions.HasFlag(ApplicationPermission.ViewUsers) },
+                { nameof(ApplicationPermission.CreateUsers), permissions.HasFlag(ApplicationPermission.CreateUsers) },
+                { nameof(ApplicationPermission.EditUsers), permissions.HasFlag(ApplicationPermission.EditUsers) },
+                { nameof(ApplicationPermission.DeleteUsers), permissions.HasFlag(ApplicationPermission.DeleteUsers) },
+                { nameof(ApplicationPermission.ViewOwnUser), permissions.HasFlag(ApplicationPermission.ViewOwnUser) },
+                { nameof(ApplicationPermission.EditOwnUser), permissions.HasFlag(ApplicationPermission.EditOwnUser) },
+                { nameof(ApplicationPermission.ManageOwnInvites), permissions.HasFlag(ApplicationPermission.ManageOwnInvites) },
+                { nameof(ApplicationPermission.ViewOwnTeams), permissions.HasFlag(ApplicationPermission.ViewOwnTeams) },
+                { nameof(ApplicationPermission.ManageSystem), permissions.HasFlag(ApplicationPermission.ManageSystem) }
+            };
         }
 
-        private object GetRenderInfoBasedOnRule(string rule, string teamId)
+        private Dictionary<string, bool> GetTeamPermissionsArray(TeamPermission permissions)
         {
-            switch (rule)
+            return new Dictionary<string, bool>
             {
-                case "Leader":
-                    return new
-                    {
-                        Page = "TeamLeaderDashboard",
-                        Permissions = "ManageMembers,ManageSchedules",
-                        Team = teamId,
-                        NeedsTeamSelection = false,
-                        Components = new[] { "MembersList", "SchedulesList", "InviteForm", "TeamSettings", "ChangeTeamButton" }
-                    };
-
-                case "Editor":
-                    return new
-                    {
-                        Page = "EditorDashboard",
-                        Permissions = "EditSchedules",
-                        Team = teamId,
-                        NeedsTeamSelection = false,
-                        Components = new[] { "SchedulesList", "ScheduleEditor", "ChangeTeamButton" }
-                    };
-
-                case "Viewer":
-                    return new
-                    {
-                        Page = "ViewerDashboard",
-                        Permissions = "ReadOnly",
-                        Team = teamId,
-                        NeedsTeamSelection = false,
-                        Components = new[] { "SchedulesList", "ChangeTeamButton" }
-                    };
-
-                default:
-                    return new
-                    {
-                        Page = "Default",
-                        Permissions = "None",
-                        Team = teamId,
-                        NeedsTeamSelection = false,
-                        Components = new[] { "AccessDenied", "ChangeTeamButton" }
-                    };
-            }
+                { nameof(TeamPermission.ViewTeam), permissions.HasFlag(TeamPermission.ViewTeam) },
+                { nameof(TeamPermission.EditTeam), permissions.HasFlag(TeamPermission.EditTeam) },
+                { nameof(TeamPermission.CreateAssignments), permissions.HasFlag(TeamPermission.CreateAssignments) },
+                { nameof(TeamPermission.EditAssignments), permissions.HasFlag(TeamPermission.EditAssignments) },
+                { nameof(TeamPermission.ViewAssignments), permissions.HasFlag(TeamPermission.ViewAssignments) },
+                { nameof(TeamPermission.ManageInvites), permissions.HasFlag(TeamPermission.ManageInvites) },
+                { nameof(TeamPermission.CreateSchedules), permissions.HasFlag(TeamPermission.CreateSchedules) },
+                { nameof(TeamPermission.EditSchedules), permissions.HasFlag(TeamPermission.EditSchedules) },
+                { nameof(TeamPermission.DeleteSchedules), permissions.HasFlag(TeamPermission.DeleteSchedules) },
+                { nameof(TeamPermission.ViewSchedules), permissions.HasFlag(TeamPermission.ViewSchedules) },
+                { nameof(TeamPermission.ManageTeamSettings), permissions.HasFlag(TeamPermission.ManageTeamSettings) }
+            };
         }
     }
 }
